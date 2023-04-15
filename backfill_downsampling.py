@@ -1,16 +1,15 @@
 import time
-Chfrom parser import ParserError
+from configparser import ConfigParser
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import dateutil.parser
-from pathlib import Path
-from datetime import datetime, timedelta
-from influxdb_client import InfluxDBClient, Point
-from configparser import ConfigParser
+from influxdb_client import InfluxDBClient
 
 config = ConfigParser()
 config.read('config.ini')
 INTERVAL = config.getint("position", "interval_mins", fallback=5)
-MAX = -525960  # 1 year
+MAX_1_Y = datetime.today().replace(tzinfo=timezone(timedelta(hours=2))) - timedelta(days=365)
 
 source_bucket = config.get("main", "source_bucket")
 destination_bucket = config.get("main", "destination_bucket")
@@ -19,18 +18,12 @@ client = InfluxDBClient(url=config.get("main", "url"), token=config.get("main", 
                         org=config.get("main", "org"), timeout=config.getint("main", "timeout"))
 
 downsample_query = Path("query.flux").read_text()
-# print(downsample_query)
 
 query_api = client.query_api()
 
-# We query Influxdb by relative times, we work from -5 minutes to -0 (now)
-# we then decrease both of them by 5 minutes and do this until we reach 'MAX'
-cur_stop = config.getint('position', 'start', fallback=0)
-cur_start = cur_stop - INTERVAL
-
-# position_str = "2023-04-15T08:51:28.338424"
 position_str = config.get("position", "time")
 position = datetime.today()
+position = position.replace(tzinfo=timezone(timedelta(hours=2)))
 
 try:
     position = dateutil.parser.isoparse(position_str)
@@ -39,35 +32,33 @@ except ValueError:
 
 # now = datetime.today()
 start = position - timedelta(minutes=INTERVAL)
-
 print("From {} to {}.".format(start.isoformat(), position.isoformat()))
 
-print("Starting to process position {} to {}...".format(cur_start, cur_stop))
-while MAX < cur_start:
+while MAX_1_Y < start:
     t_start = time.perf_counter()
-    downsample_1m = downsample_query.format(
+    downsample = downsample_query.format(
         source_bucket=source_bucket,
-        rel_start=cur_start,
-        rel_stop=cur_stop,
+        rel_start=start.isoformat(),
+        rel_stop=position.isoformat(),
         aggregate_interval='1m',
         destination_bucket=destination_bucket
     )
 
-    print(downsample_1m)
-    print("Downsampling from {} to {}... ".format(cur_start, cur_stop), end='')
-
-    result = query_api.query_raw(downsample_1m)
+    # print(downsample)
+    print("Downsampling from {} to {}... ".format(start.isoformat(), position.isoformat()), end='')
+    result = query_api.query_raw(downsample)
 
     # There's probably no more data if the result string is of length 0.
     result_length = len(result.data.decode("utf-8").strip())
 
-    if MAX > cur_start or result_length <= 0:
+    if MAX_1_Y > start or result_length <= 0:
+        print("Finished on length {} or {} > start {}.".format(result_length, MAX_1_Y, start))
         break
 
-    cur_start += -INTERVAL
-    cur_stop += -INTERVAL
+    position = position - timedelta(minutes=INTERVAL)
+    start = start - timedelta(minutes=INTERVAL)
 
-    config.set('position', 'start', str(cur_stop))
+    config.set('position', 'time', position.isoformat())
     with open('config.ini', 'w') as f:
         config.write(f)
 
