@@ -1,9 +1,11 @@
 import time
-from pathlib import Path
+Chfrom parser import ParserError
 
+import dateutil.parser
+from pathlib import Path
+from datetime import datetime, timedelta
 from influxdb_client import InfluxDBClient, Point
 from configparser import ConfigParser
-
 
 config = ConfigParser()
 config.read('config.ini')
@@ -24,7 +26,21 @@ query_api = client.query_api()
 # We query Influxdb by relative times, we work from -5 minutes to -0 (now)
 # we then decrease both of them by 5 minutes and do this until we reach 'MAX'
 cur_stop = config.getint('position', 'start', fallback=0)
-cur_start = cur_stop-INTERVAL
+cur_start = cur_stop - INTERVAL
+
+# position_str = "2023-04-15T08:51:28.338424"
+position_str = config.get("position", "time")
+position = datetime.today()
+
+try:
+    position = dateutil.parser.isoparse(position_str)
+except ValueError:
+    print("Could not parse date. Using now().")
+
+# now = datetime.today()
+start = position - timedelta(minutes=INTERVAL)
+
+print("From {} to {}.".format(start.isoformat(), position.isoformat()))
 
 print("Starting to process position {} to {}...".format(cur_start, cur_stop))
 while MAX < cur_start:
@@ -37,7 +53,7 @@ while MAX < cur_start:
         destination_bucket=destination_bucket
     )
 
-    # print(downsample_1m)
+    print(downsample_1m)
     print("Downsampling from {} to {}... ".format(cur_start, cur_stop), end='')
 
     result = query_api.query_raw(downsample_1m)
