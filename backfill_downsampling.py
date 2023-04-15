@@ -40,7 +40,7 @@ while MAX_1_Y < start:
         source_bucket=source_bucket,
         rel_start=start.isoformat(),
         rel_stop=position.isoformat(),
-        aggregate_interval='1m',
+        aggregate_interval="1m",
         destination_bucket=destination_bucket
     )
 
@@ -51,7 +51,8 @@ while MAX_1_Y < start:
     # There's probably no more data if the result string is of length 0.
     result_length = len(result.data.decode("utf-8").strip())
 
-    if MAX_1_Y > start or result_length <= 0:
+    # if MAX_1_Y > start or result_length <= 0:
+    if MAX_1_Y > start:
         print("Finished on length {} or {} > start {}.".format(result_length, MAX_1_Y, start))
         break
 
