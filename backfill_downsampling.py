@@ -9,7 +9,9 @@ from influxdb_client import InfluxDBClient
 config = ConfigParser()
 config.read('config.ini')
 INTERVAL = config.getint("position", "interval_mins", fallback=5)
-MAX_1_Y = datetime.today().replace(tzinfo=timezone(timedelta(hours=2))) - timedelta(days=365)
+
+max_days = config.getint("position", "max_days", fallback=365)
+MAX = datetime.today().replace(tzinfo=timezone(timedelta(hours=2))) - timedelta(days=max_days)
 
 source_bucket = config.get("main", "source_bucket")
 destination_bucket = config.get("main", "destination_bucket")
@@ -30,11 +32,12 @@ try:
 except ValueError:
     print("Could not parse date. Using now().")
 
-# now = datetime.today()
 start = position - timedelta(minutes=INTERVAL)
+begin = position
+
 print("From {} to {}.".format(start.isoformat(), position.isoformat()))
 
-while MAX_1_Y < start:
+while MAX < start:
     t_start = time.perf_counter()
     downsample = downsample_query.format(
         source_bucket=source_bucket,
@@ -52,8 +55,9 @@ while MAX_1_Y < start:
     result_length = len(result.data.decode("utf-8").strip())
 
     # if MAX_1_Y > start or result_length <= 0:
-    if MAX_1_Y > start:
-        print("Finished on length {} or {} > start {}.".format(result_length, MAX_1_Y, start))
+    if MAX > start:
+        print("Finished on length {} or {} > start {}."
+              .format(result_length, MAX, start))
         break
 
     position = position - timedelta(minutes=INTERVAL)
@@ -65,7 +69,9 @@ while MAX_1_Y < start:
 
     t_end = time.perf_counter()
     t_elapsed = t_end - t_start
-    print(f" done in {t_elapsed:.03f} secs.")
+    minutes_completed = (begin-position).total_seconds() / 60.0
+    percent = minutes_completed / (max_days * 24 * 60) * 100
+    print(f" done in {t_elapsed:.03f} secs. {percent:.03f}% finished")
     # End of loop
 
 print("\nFinished.")
