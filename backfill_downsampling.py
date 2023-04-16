@@ -35,7 +35,8 @@ except ValueError:
 start = position - timedelta(minutes=INTERVAL)
 begin = position
 
-print("From {} to {}.".format(start.isoformat(), position.isoformat()))
+print("Downsampling from {} to {}".format(source_bucket, destination_bucket))
+print("Starting {} and previous {} days (increments of {} minutes).".format(start.isoformat(), max_days, INTERVAL))
 
 while MAX < start:
     t_start = time.perf_counter()
